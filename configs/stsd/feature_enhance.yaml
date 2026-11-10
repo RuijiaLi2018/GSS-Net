@@ -1,0 +1,24 @@
+input_root: ../../data/STSD
+output_root: ../../data/STSD
+file_patterns: ["*.pth", "*.pt", "*.npy", "*.npz"]
+overwrite: true
+
+feature:
+  output_dim: 5
+  normal_abs: false
+  density_type: mean_distance
+  density_norm_mode: standard
+
+neighbor:
+  mode: serialized_candidate_knn
+  k: 16
+  min_neighbors: 8
+  serialization: hilbert
+  candidate_multiplier: 8
+  max_radius: null
+  serialized_fallback: knn
+
+runtime:
+  num_workers: 8
+  chunk_size: 200000
+  save_dtype: float32

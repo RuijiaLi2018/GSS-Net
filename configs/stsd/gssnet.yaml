@@ -1,0 +1,122 @@
+num_gpus: 8
+cuda_visible_devices: "0,1,2,3,4,5,6,7"
+epochs: 50
+batch_size: 24
+batch_size_eval: 8
+num_workers: 4
+pin_memory: true
+drop_last_train: false
+amp: true
+clip_grad: 0.5
+eval_interval: 1
+log_interval: 50
+mix_prob: 0.8
+
+data_root: auto
+save_path: outputs/stsd_train
+test_save_path: outputs/stsd_test
+weight_name: best_miou.pth
+
+optimizer:
+  lr: 0.006
+  weight_decay: 0.05
+  mamba_lr_scale: 0.05
+  param_groups:
+    block: 0.0006
+
+scheduler:
+  pct_start: 0.05
+  div_factor: 10.0
+  final_div_factor: 1000.0
+  # OneCycle max_lr order: backbone, attention blocks, Mamba (lr * mamba_lr_scale)
+  max_lr: [0.006, 0.0006, 0.0003]
+
+train:
+  split: Area_1
+  pipeline: train
+  loop: 10
+val:
+  split: Area_2
+  pipeline: val
+  loop: 1
+test:
+  split: Area_3
+  loop: 1
+  transform:
+    - type: CenterShift
+      apply_z: true
+  test_cfg:
+    voxelize:
+      type: GridSample
+      grid_size: 0.02
+      hash_type: fnv
+      mode: test
+      return_grid_coord: true
+    crop: null
+    post_transform:
+      - type: CenterShift
+        apply_z: false
+      - type: Collect
+        keys: [coord, grid_coord, index]
+        feat_keys: ["coord", "enhanced_feat"]
+    aug_transform:
+      - [{type: RandomScale, scale: [1, 1]}]
+
+model:
+  num_classes: 12
+  backbone_out_channels: 64
+  ignore_index: -1
+  backbone:
+    in_channels: 17
+    order: [z, z-trans, hilbert, hilbert-trans]
+    stride: [2, 2, 2, 2]
+    enc_depths: [2, 2, 2, 6, 2]
+    enc_channels: [32, 64, 128, 256, 512]
+    enc_num_head: [2, 4, 8, 16, 32]
+    enc_patch_size: [512, 512, 512, 512, 512]
+    dec_depths: [2, 2, 2, 2]
+    dec_channels: [64, 64, 128, 256]
+    dec_num_head: [4, 4, 8, 16]
+    dec_patch_size: [512, 512, 512, 512]
+    mlp_ratio: 4
+    qkv_bias: true
+    attn_drop: 0
+    proj_drop: 0
+    drop_path: 0.3
+    pre_norm: true
+    shuffle_orders: true
+    upcast_attention: true
+    upcast_softmax: true
+    enc_mode: false
+    dilated_attention:
+      fusion: mean
+      stage_dilations:
+        stage0: [1]
+        stage1: [1]
+        stage2: [1]
+        stage3: [1, 2]
+        stage4: [1, 2, 4]
+  loss:
+    type: cbce_lovasz_focal
+    ignore_index: -1
+    ce:
+      enabled: true
+      weight: 1.0
+      class_weight:
+        enabled: true
+        source: file
+        weight_file: outputs/stsd_train/class_weights_median_frequency.npy
+        type: median_frequency
+        beta: 0.999
+        normalize: mean
+        min_weight: 0.2
+        max_weight: 5.0
+    lovasz:
+      enabled: true
+      weight: 1.0
+      per_image: false
+    focal:
+      enabled: true
+      weight: 1.0
+      gamma: 2.0
+      alpha_from_class_weight: true
